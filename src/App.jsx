@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import logo from './assets/logo.webp';
 import { 
   Search, 
@@ -12,8 +12,10 @@ import {
   CheckCircle2,
   BookOpen,
   Printer,
-  X
+  X,
+  Save
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 // --- DADOS MOCK (Simulação de Banco de Dados) ---
 const dbMilitares = [
@@ -36,7 +38,7 @@ const dbRDE = [
 // O processo inicial do FATD possui apenas a autuação. Justificativa e Decisão são passos posteriores do processo em papel.
 const passos = [
   { id: 1, titulo: 'Envolvidos' },
-  { id: 2, titulo: 'Relato & RDE' },
+  { id: 2, titulo: 'Relato do Fato' },
   { id: 3, titulo: 'Emissão' }
 ];
 
@@ -44,14 +46,45 @@ export default function App() {
   const [passoAtual, setPassoAtual] = useState(1);
   const [busca, setBusca] = useState('');
   const [selecionados, setSelecionados] = useState([]);
-  const [observacao, setObservacao] = useState('');
 
   const [buscaRde, setBuscaRde] = useState('');
   const [rdesVinculadas, setRdesVinculadas] = useState([]);
   const [mostrarRdeManual, setMostrarRdeManual] = useState(false);
   const [rdeManual, setRdeManual] = useState({ id: '', texto: '' });
 
+  const gerarNumeroProcesso = () => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const atual = Number(window.localStorage.getItem('fatdNumeroProcesso') || '1');
+      const proximo = atual + 1;
+      window.localStorage.setItem('fatdNumeroProcesso', String(proximo));
+      return String(atual).padStart(3, '0');
+    }
+    return '001';
+  };
+
+  const [numeroProcesso, setNumeroProcesso] = useState(() => gerarNumeroProcesso());
+  const [dataEmissao, setDataEmissao] = useState('');
+  const [graduacaoMilitar, setGraduacaoMilitar] = useState('');
+  const [nomeCompletoMilitar, setNomeCompletoMilitar] = useState('');
+  const [nomeGuerraMilitar, setNomeGuerraMilitar] = useState('');
+  const [numeroMilitar, setNumeroMilitar] = useState('');
+  const [graduacaoParticipante, setGraduacaoParticipante] = useState('');
+  const [nomeCompletoParticipante, setNomeCompletoParticipante] = useState('');
+  const [nomeGuerraParticipante, setNomeGuerraParticipante] = useState('');
+  const [descricaoOcorrido, setDescricaoOcorrido] = useState('');
+  const [continuacaoOcorrido, setContinuacaoOcorrido] = useState('');
+  const [decisaoAutoridade, setDecisaoAutoridade] = useState('');
+  const [numeroBINotaPunicao, setNumeroBINotaPunicao] = useState('');
+  const [dataPublicacaoBI, setDataPublicacaoBI] = useState('');
+
+  // Campos do FATD
   const [visualizandoImpressao, setVisualizandoImpressao] = useState(false);
+
+  // RDE selecionados para o texto padrão
+  const [rdeSelecionados, setRdeSelecionados] = useState([]);
+
+  // Ref para impressão/PDF
+  const printRef = useRef();
 
   // --- LÓGICA DE INTERAÇÃO ---
   const militaresFiltrados = dbMilitares.filter(m => 
@@ -108,152 +141,212 @@ export default function App() {
     if (passoAtual > 1) setPassoAtual(passoAtual - 1);
   };
 
+
   const imprimirDocumento = () => {
     window.print();
   };
 
+  // Geração de PDF
+  const salvarPDF = () => {
+    const doc = new jsPDF({ format: 'a4', unit: 'mm' });
+    // Simples: renderiza o HTML do printRef
+    doc.html(printRef.current, {
+      callback: function (doc) {
+        doc.save('fatd.pdf');
+      },
+      margin: [10, 10, 10, 10],
+      autoPaging: 'text',
+      x: 0,
+      y: 0
+    });
+  };
+
   // --- COMPONENTES DE IMPRESSÃO (ANEXO V) ---
   if (visualizandoImpressao) {
-    const dataAtual = new Date().toLocaleDateString('pt-BR');
-    const anoAtual = new Date().getFullYear();
-    const processoNr = `${Date.now().toString().slice(-5)}/${anoAtual}`;
+    const militar = selecionados[0] || {};
+    const nomeCompletoMilitarExibicao = nomeCompletoMilitar || militar.nome || '___';
+    const graduacaoMilitarExibicao = graduacaoMilitar || militar.grad || '___';
+    const nomeGuerraMilitarExibicao = nomeGuerraMilitar || '___';
+    const numeroMilitarExibicao = numeroMilitar || '___';
+    const graduacaoParticipanteExibicao = graduacaoParticipante || '___';
+    const nomeCompletoParticipanteExibicao = nomeCompletoParticipante || '___';
+    const nomeGuerraParticipanteExibicao = nomeGuerraParticipante || '___';
+    const descricaoOcorridoExibicao = descricaoOcorrido || '__________________________________________';
+    const continuacaoOcorridoExibicao = continuacaoOcorrido || '__________________________________________';
+    const decisaoAutoridadeExibicao = decisaoAutoridade || '';
+    const numeroBINotaPunicaoExibicao = numeroBINotaPunicao || '___';
+    const dataPublicacaoBIExibicao = dataPublicacaoBI || '____/____/______';
 
     return (
-      <div className="min-h-screen bg-gray-200 flex flex-col font-sans">
-        {/* Estilos específicos para a impressão */}
-        <style dangerouslySetInnerHTML={{__html: `
-          @media print {
-            body { background: white !important; }
-            .no-print { display: none !important; }
-            .page-break { page-break-after: always; }
-            @page { margin: 15mm; size: A4 portrait; }
-          }
-        `}} />
-
-        {/* Barra superior do App (Não aparece na impressão) */}
-        <div className="bg-[#556b2f] p-4 text-white flex justify-between items-center no-print shadow-md sticky top-0 z-50">
-          <button onClick={() => setVisualizandoImpressao(false)} className="flex items-center gap-2 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors">
-            <X size={20} /> Fechar Visualização
-          </button>
-          <button onClick={imprimirDocumento} className="bg-white text-[#556b2f] px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm hover:bg-gray-100">
-            <Printer size={18} /> Imprimir FATD
-          </button>
-        </div>
-
-        {/* ÁREA DA FOLHA A4 (Padrão Anexo V) */}
-        <div className="flex-1 w-full flex flex-col items-center p-4 sm:p-8">
-          {selecionados.map((militar, index) => (
-            <div key={militar.id} className="bg-white w-full max-w-[210mm] min-h-[297mm] p-8 sm:p-12 shadow-xl mb-8 font-serif text-[13px] leading-relaxed text-black page-break relative">
-              
-              {/* CABEÇALHO DO DOCUMENTO */}
-              <div className="text-center mb-6">
-                <img src={logo} alt="Brasão" className="w-16 h-16 mx-auto mb-2" />
-                <p className="font-bold tracking-wider">MINISTÉRIO DA DEFESA</p>
-                <p className="font-bold tracking-wider">EXÉRCITO BRASILEIRO</p>
-                <p>COMANDO MILITAR DO SUL</p> {/* Escalão Superior Simulado */}
-                <p className="uppercase">1º Batalhão de Infantaria</p> {/* Escalão Considerado Simulado */}
-                
-                <h1 className="mt-6 mb-2 font-bold underline text-[15px]">FORMULÁRIO DE APURAÇÃO DE TRANSGRESSÃO DISCIPLINAR</h1>
-              </div>
-
-              <div className="flex justify-between font-bold mb-6 text-[14px]">
-                <span>PROCESSO Nº: {processoNr}</span>
-                <span>DATA: {dataAtual}</span>
-              </div>
-
-              {/* 1. IDENTIFICAÇÃO DO MILITAR ARROLADO */}
-              <div className="border border-black mb-4">
-                <div className="bg-gray-100 border-b border-black py-1 text-center font-bold">
-                  IDENTIFICAÇÃO DO MILITAR
-                </div>
-                <div className="p-3 grid grid-cols-2 gap-y-2">
-                  <div className="flex"><span className="font-bold w-32">Grau Hierárquico:</span> <span>{militar.grad}</span></div>
-                  <div className="flex"><span className="font-bold w-24">NR/IDENT:</span> <span>{militar.identidade}</span></div>
-                  <div className="flex col-span-2"><span className="font-bold w-32">Nome Completo:</span> <span>{militar.nome}</span></div>
-                  <div className="flex col-span-2"><span className="font-bold w-32">Subunidade/OM:</span> <span>{militar.unidade}</span></div>
-                </div>
-              </div>
-
-              {/* 2. IDENTIFICAÇÃO DO PARTICIPANTE */}
-              <div className="border border-black mb-4">
-                <div className="bg-gray-100 border-b border-black py-1 text-center font-bold">
-                  IDENTIFICAÇÃO DO PARTICIPANTE
-                </div>
-                <div className="p-3 grid grid-cols-2 gap-y-2">
-                  <div className="flex"><span className="font-bold w-32">Grau Hierárquico:</span> <span>Capitão</span></div>
-                  <div className="flex"><span className="font-bold w-24">NR/IDENT:</span> <span>098765432-1</span></div>
-                  <div className="flex col-span-2"><span className="font-bold w-32">Nome Completo:</span> <span>Mário da Silva</span></div>
-                  <div className="flex col-span-2"><span className="font-bold w-32">Subunidade/OM:</span> <span>Cia. Cmdo Apoio / 1º BI</span></div>
-                </div>
-              </div>
-
-              {/* 3. RELATO DO FATO */}
-              <div className="border border-black mb-4">
-                <div className="bg-gray-100 border-b border-black py-1 text-center font-bold">
-                  RELATO DO FATO
-                </div>
-                <div className="p-4 min-h-[160px] flex flex-col">
-                  <div className="flex-1 whitespace-pre-wrap text-justify">
-                    {observacao || "(Nenhum relato adicional preenchido)."}
-                    
-                    {rdesVinculadas.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-dashed border-gray-400">
-                        <span className="font-bold block mb-1">Enquadramento Preliminar Sugerido:</span>
-                        <ul className="list-disc pl-5 space-y-1">
-                          {rdesVinculadas.map(r => (
-                            <li key={r.id}>Item {r.id} do Anexo I do RDE: {r.texto}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="mt-12 flex justify-between items-end">
-                    <span>Data: ____/____/________</span>
-                    <div className="text-center">
-                      <div className="border-b border-black w-64 mb-1"></div>
-                      <p>Capitão MÁRIO DA SILVA</p>
-                      <p className="text-xs">Participante / Oficial Relator</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. CIENTE DO MILITAR ARROLADO */}
-              <div className="border border-black mb-10">
-                <div className="bg-gray-100 border-b border-black py-1 text-center font-bold">
-                  CIENTE DO MILITAR ARROLADO
-                </div>
-                <div className="p-4">
-                  <p className="text-justify mb-10 indent-8">
-                    Declaro que tenho conhecimento de que me está sendo imputada a autoria dos atos acima e me foi concedido o prazo de três dias úteis, para, querendo, apresentar, por escrito, as minhas justificativas ou razões de defesa.
-                  </p>
-                  <div className="flex justify-between items-end">
-                    <span>Data: ____/____/________</span>
-                    <div className="text-center">
-                      <div className="border-b border-black w-64 mb-1"></div>
-                      <p>{militar.nome}</p>
-                      <p className="text-xs">{militar.grad}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* VERSO E OUTRAS PARTES (Apenas indicativo) */}
-              <div className="text-center text-gray-400 text-xs mt-auto">
-                - O militar arrolado deverá apresentar suas justificativas/razões de defesa no verso deste documento -
-              </div>
-
-            </div>
-          ))}
+      <div className="min-h-screen bg-gray-200 flex flex-col font-sans w-full">
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+        body { background: white !important; }
+        .no-print { display: none !important; }
+        .page-break { page-break-after: always; }
+        @page { margin: 15mm; size: A4 portrait; }
+        }
+      `}} />
+      <div className="bg-[#556b2f] p-4 text-white flex justify-between items-center no-print shadow-md sticky top-0 z-50">
+        <button onClick={() => setVisualizandoImpressao(false)} className="flex items-center gap-2 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors">
+        <X size={20} /> Fechar Visualização
+        </button>
+        <div className="flex gap-2">
+        <button onClick={salvarPDF} className="bg-white text-[#556b2f] px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm hover:bg-gray-100">
+          <Save size={18} /> Salvar em PDF
+        </button>
+        <button onClick={imprimirDocumento} className="bg-white text-[#556b2f] px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm hover:bg-gray-100">
+          <Printer size={18} /> Imprimir FATD
+        </button>
         </div>
       </div>
+      <div className="flex-1 w-full flex flex-col items-center p-2 xs:p-4 sm:p-8">
+        <div ref={printRef} className="bg-white w-full max-w-full sm:max-w-[210mm] min-h-[297mm] p-4 sm:p-8 mb-8 font-serif text-[12px] leading-relaxed text-black text-center page-break relative print:shadow-none print:p-0 print:max-w-full print:min-h-0">
+          <div className="w-full border border-black p-4 mb-6">
+            <div className="text-center leading-tight">
+              <p className="font-semibold">MINISTÉRIO DA DEFESA</p>
+              <p className="font-semibold">EXÉRCITO BRASILEIRO</p>
+              <p className="font-semibold">63º BATALHÃO DE INFANTARIA</p>
+              <p>(Regimento do Moura / 1767)</p>
+              <p className="font-semibold mt-2">BATALHÃO FERNANDO MACHADO</p>
+              <p className="font-semibold">1ª COMPANHIA DE FUZILEIROS</p>
+              <p className="font-semibold mt-3">FORMULÁRIO DE APURAÇÃO DE TRANSGRESSÃO DISCIPLINAR</p>
+            </div>
+
+            <div className="mt-4 border-t border-black pt-3 flex justify-between items-center text-sm uppercase font-semibold">
+              <span>PROCESSO Nr: {numeroProcesso || '___'} - 63º BI (1ª Via)</span>
+              <span>DATA: {dataEmissao || '____/____/______'}</span>
+            </div>
+          </div>
+
+          <div className="border border-black p-4 mb-4 text-left">
+            <p className="font-semibold">IDENTIFICAÇÃO DO MILITAR</p>
+            <div className="mt-3">
+              <p><strong>Grau Hierárquico:</strong></p>
+              <p>{graduacaoMilitarExibicao}</p>
+            </div>
+            <div className="mt-3">
+              <p><strong>Nome Completo:</strong></p>
+              <p>{nomeCompletoMilitarExibicao}</p>
+            </div>
+            <div className="mt-3 border-t border-black pt-3">
+              <p><strong>SU/OM:</strong></p>
+              <p>1ª Cia Fuz</p>
+            </div>
+          </div>
+
+          <div className="border border-black p-4 mb-4 text-left">
+            <p className="font-semibold">IDENTIFICAÇÃO DO PARTICIPANTE</p>
+            <div className="mt-3">
+              <p><strong>Grau Hierárquico:</strong></p>
+              <p>{graduacaoParticipanteExibicao}</p>
+            </div>
+            <div className="mt-3 border-black pt-3">
+              <p><strong>Nome Completo:</strong></p>
+              <p>{nomeCompletoParticipanteExibicao}</p>
+            </div>
+          </div>
+
+          <div className="border border-black p-4 mb-4">
+            <p className="font-semibold">RELATO DO FATO</p>
+            <p className="mt-3 text-justify whitespace-pre-line">
+              {`Participo o(a) ${graduacaoMilitarExibicao} ${numeroMilitarExibicao} ${nomeGuerraMilitarExibicao}, da 1ª Cia Fuz, por ${descricaoOcorridoExibicao} e ao ser interpelado pelo ${graduacaoParticipanteExibicao} ${nomeGuerraParticipanteExibicao}, ${continuacaoOcorridoExibicao}.`}
+            </p>
+            <div className="mt-4 border-t border-black pt-3 text-center">
+              <p>Assinatura:</p>
+              <p>_____________________</p>
+              <p className="mt-2 font-semibold">{nomeCompletoParticipanteExibicao}</p>
+              <p>{graduacaoParticipanteExibicao}</p>
+            </div>
+          </div>
+
+          <div className="border border-black p-4">
+            <p className="font-semibold">CIENTE DO MILITAR ARROLADO</p>
+            <div className="mt-3">
+              <p>Declaro que tenho conhecimento de que me está sendo imputada a autoria dos atos acima e me foi concedido o prazo de três dias úteis para apresentar, por escrito, as minhas justificativas ou razões de defesa.</p>
+            </div>
+            <div className="mt-3 border-t border-black pt-3">
+              <p><strong>Recebi em:</strong></p>
+              <p>__/__/2026</p>
+            </div>
+            <div className="mt-4 border-t border-black pt-3">
+              <p>Assinatura:</p>
+              <p>_____________________</p>
+              <p className="mt-2 font-semibold">{nomeCompletoMilitarExibicao}</p>
+              <p>{graduacaoMilitarExibicao}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="page-break" />
+
+        <div className="bg-white w-full max-w-full sm:max-w-[210mm] min-h-[297mm] p-4 sm:p-8 mb-8 font-serif text-[12px] leading-relaxed text-black text-center border border-black print:shadow-none print:p-0 print:max-w-full print:min-h-0">
+          <div className="border border-black p-4 mb-4">
+            <p className="font-semibold">JUSTIFICATIVA / RAZÕES DE DEFESA</p>
+            <div className="mt-4 space-y-4">
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+              <div className="border-b border-black h-px" />
+            </div>
+            <div className="mt-4 border-t border-black pt-3">
+              <p>Data:</p>
+              <p>__/__/______</p>
+            </div>
+            <div className="mt-4 border-t border-black pt-3">
+              <p>Assinatura:</p>
+              <p>_____________________</p>
+              <p className="mt-2 font-semibold">{nomeCompletoMilitarExibicao}</p>
+              <p>{graduacaoMilitarExibicao}</p>
+            </div>
+          </div>
+
+          <div className="border border-black p-4 mb-4">
+            <p className="font-semibold">DECISÃO DA AUTORIDADE COMPETENTE PARA APLICAR A PUNIÇÃO DISCIPLINAR</p>
+            <div className="mt-4 min-h-44 border border-black p-3">
+              {decisaoAutoridadeExibicao ? (
+                <p className="whitespace-pre-line">{decisaoAutoridadeExibicao}</p>
+              ) : (
+                <>
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px mb-3" />
+                  <div className="border-b border-black h-px" />
+                </>
+              )}
+            </div>
+            <div className="mt-4 border-t border-black pt-3">
+              <p>Data:</p>
+              <p>__/__/______</p>
+            </div>
+            <div className="mt-4 border-t border-black pt-3">
+              <p className="font-semibold">MAURICIO NARCISO - CAP</p>
+              <p>Comandante da 1ª Cia Fuz</p>
+              <p className="font-semibold" style={{ paddingTop: '5%' }}>
+                PUNIÇÃO PUBLICADA NO BI Nr____, de ____ de _____ de 2026.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     );
   }
 
   // --- TELA PRINCIPAL (APLICATIVO MOBILE) ---
   return (
-    <div className="max-w-md mx-auto bg-gray-100 min-h-screen flex flex-col font-sans text-gray-800 shadow-2xl relative pb-20 overflow-hidden">
+    <div className="w-full min-h-screen flex flex-col font-sans text-gray-800 bg-gray-100 shadow-2xl relative pb-20 overflow-hidden sm:max-w-md sm:mx-auto">
       
       {/* CABEÇALHO (HEADER) */}
       <header className="bg-[#556b2f] text-white p-4 rounded-b-xl shadow-md z-10 shrink-0">
@@ -268,19 +361,19 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-3 bg-white/10 p-2 rounded-lg">
-          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Capitao&backgroundColor=b6e3f4" alt="Perfil" className="w-10 h-10 rounded-full border-2 border-white/30" />
+          {/* <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Capitao&backgroundColor=b6e3f4" alt="Perfil" className="w-10 h-10 rounded-full border-2 border-white/30" /> */}
           <div>
-            <p className="font-semibold text-sm">Cap. SILVA</p>
-            <p className="text-xs opacity-80">Cia. Cmdo Apoio</p>
+            <p className="font-semibold text-sm">Cap. NARCISO</p>
+            <p className="text-xs opacity-80">1° CIA</p>
           </div>
         </div>
       </header>
 
       {/* ÁREA PRINCIPAL COM STEPPER */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex flex-col sm:flex-row overflow-hidden">
         
         {/* STEPPER VERTICAL (Lado Esquerdo) */}
-        <div className="w-12 bg-white flex flex-col items-center py-6 border-r border-gray-200 overflow-y-auto">
+        <div className="w-full sm:w-12 bg-white flex flex-row sm:flex-col items-center py-2 sm:py-6 border-b sm:border-b-0 sm:border-r border-gray-200 overflow-x-auto sm:overflow-y-auto">
           {passos.map((passo, index) => (
             <div key={passo.id} className="flex flex-col items-center relative">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold z-10
@@ -296,7 +389,7 @@ export default function App() {
         </div>
 
         {/* CONTEÚDO DO PASSO */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-4 sm:space-y-6">
           
           <div className="mb-4">
             <h2 className="text-lg font-bold text-gray-700 uppercase tracking-wide">
@@ -403,11 +496,10 @@ export default function App() {
               <div className="space-y-3 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-                    <BookOpen size={16} className="text-[#556b2f]" /> Enquadramento (RDE)
+                    <BookOpen size={16} className="text-[#556b2f]" /> Relato do Fato
                   </label>
-                  <span className="bg-[#556b2f] text-white px-2 py-0.5 rounded-full text-xs">{rdesVinculadas.length}</span>
+                  <span className="bg-[#556b2f] text-white px-2 py-0.5 rounded-full text-xs">{rdeSelecionados.length}</span>
                 </div>
-
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
                   <input 
@@ -418,71 +510,140 @@ export default function App() {
                     className="w-full bg-gray-50 border border-gray-300 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50 transition-all"
                   />
                 </div>
-
-                {buscaRde && (
-                  <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-h-48 overflow-y-auto">
-                    {rdesFiltradas.length > 0 ? rdesFiltradas.map(r => (
-                      <div key={r.id} className="p-2 border-b last:border-0 hover:bg-gray-50">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-bold text-gray-800">
-                              <span className="text-[#556b2f]">Nº {r.id}</span> - {r.titulo}
-                            </p>
-                            <p className="text-[10px] text-gray-500 leading-tight mt-0.5">{r.texto}</p>
-                          </div>
-                          <button onClick={() => vincularRde(r)} disabled={rdesVinculadas.find(v => v.id === r.id)} className="shrink-0 bg-[#556b2f] text-white p-1.5 rounded-md text-xs font-medium disabled:opacity-50">
-                            <Plus size={14} />
-                          </button>
-                        </div>
+                <div className="bg-white border border-gray-200 rounded-lg shadow-sm max-h-48 overflow-y-auto mt-2">
+                  {rdesFiltradas.length > 0 ? rdesFiltradas.map(r => (
+                    <label key={r.id} className="flex items-start gap-2 p-2 border-b last:border-0 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!rdeSelecionados.find(sel => sel.id === r.id)}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setRdeSelecionados([...rdeSelecionados, r]);
+                          } else {
+                            setRdeSelecionados(rdeSelecionados.filter(sel => sel.id !== r.id));
+                          }
+                        }}
+                        className="mt-1"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-gray-800">
+                          <span className="text-[rgb(85,107,47)]">Nº {r.id}</span> - {r.titulo}
+                        </p>
+                        <p className="text-[10px] text-gray-500 leading-tight mt-0.5">{r.texto}</p>
                       </div>
-                    )) : (
-                      <p className="p-3 text-xs text-center text-gray-500">Nenhum item encontrado.</p>
-                    )}
-                  </div>
-                )}
-
-                {!mostrarRdeManual ? (
-                  <button onClick={() => setMostrarRdeManual(true)} className="text-xs text-[#556b2f] font-semibold flex items-center gap-1 hover:underline w-full justify-center py-1">
-                    + Adicionar RDE Manualmente
-                  </button>
-                ) : (
-                  <div className="bg-green-50 p-3 rounded-lg border border-green-200 space-y-2 mt-2 animate-in fade-in zoom-in duration-200">
-                    <div className="flex gap-2">
-                      <input type="text" placeholder="Nº (Opc.)" value={rdeManual.id} onChange={e => setRdeManual({...rdeManual, id: e.target.value})} className="w-1/3 text-xs p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#556b2f]/50 outline-none" />
-                      <input type="text" placeholder="Descreva a transgressão..." value={rdeManual.texto} onChange={e => setRdeManual({...rdeManual, texto: e.target.value})} className="w-2/3 text-xs p-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#556b2f]/50 outline-none" />
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <button onClick={() => setMostrarRdeManual(false)} className="text-xs text-gray-500 font-medium px-2 py-1">Cancelar</button>
-                      <button onClick={adicionarRdeManual} className="bg-[#556b2f] text-white text-xs px-3 py-1.5 rounded font-medium">Incluir</button>
-                    </div>
-                  </div>
-                )}
-
-                {rdesVinculadas.length > 0 && (
-                  <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Itens Vinculados</p>
-                    {rdesVinculadas.map(r => (
-                      <div key={r.id} className="flex gap-2 bg-gray-50 p-2.5 rounded-lg border border-gray-200 relative pr-8">
-                        <div className="bg-[#556b2f] text-white text-xs font-bold px-1.5 py-0.5 rounded h-fit shrink-0">{r.id}</div>
-                        <p className="text-[11px] text-gray-700 leading-snug">{r.texto}</p>
-                        <button onClick={() => removerRde(r.id)} className="absolute right-2 top-2 p-1 text-gray-400 hover:text-red-500 transition-colors">
-                          <Minus size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                    </label>
+                  )) : (
+                    <p className="p-3 text-xs text-center text-gray-500">Nenhum item encontrado.</p>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-700">Relato do Fato</label>
-                <textarea 
-                  rows="5" 
-                  value={observacao}
-                  onChange={(e) => setObservacao(e.target.value)}
-                  placeholder="Descreva com detalhes o fato ocorrido, data, hora, local e envolvimento..."
-                  className="w-full bg-white border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50 resize-none shadow-sm"
-                ></textarea>
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Processo Nr</label>
+                  <div className="w-full bg-gray-50 border border-gray-300 rounded-lg p-2 text-sm text-gray-700">
+                    {numeroProcesso}
+                  </div>
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Data de Emissão</label>
+                  <input
+                    type="date"
+                    value={dataEmissao}
+                    onChange={e => setDataEmissao(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Graduação do Militar</label>
+                  <input
+                    type="text"
+                    value={graduacaoMilitar}
+                    onChange={e => setGraduacaoMilitar(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: Sd EP"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Nome Completo do Militar</label>
+                  <input
+                    type="text"
+                    value={nomeCompletoMilitar}
+                    onChange={e => setNomeCompletoMilitar(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: João Souza Santos"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Número do Militar</label>
+                  <input
+                    type="text"
+                    value={numeroMilitar}
+                    onChange={e => setNumeroMilitar(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: 123456"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Nome de Guerra do Militar</label>
+                  <input
+                    type="text"
+                    value={nomeGuerraMilitar}
+                    onChange={e => setNomeGuerraMilitar(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: Guerreiro"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Graduação do Participante</label>
+                  <input
+                    type="text"
+                    value={graduacaoParticipante}
+                    onChange={e => setGraduacaoParticipante(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: Cap"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Nome Completo do Participante</label>
+                  <input
+                    type="text"
+                    value={nomeCompletoParticipante}
+                    onChange={e => setNomeCompletoParticipante(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: Mauricio Narciso"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Nome de Guerra do Participante</label>
+                  <input
+                    type="text"
+                    value={nomeGuerraParticipante}
+                    onChange={e => setNomeGuerraParticipante(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: N/A"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Descrição do Ocorrido</label>
+                  <textarea
+                    rows="4"
+                    value={descricaoOcorrido}
+                    onChange={e => setDescricaoOcorrido(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Descreva o fato ocorrido..."
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <label className="text-sm font-semibold text-gray-700">Continuação do Ocorrido</label>
+                  <textarea
+                    rows="4"
+                    value={continuacaoOcorrido}
+                    onChange={e => setContinuacaoOcorrido(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Continuação do relato..."
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -501,8 +662,41 @@ export default function App() {
               <div className="bg-white p-4 rounded-lg text-left shadow-sm mt-6 text-sm border border-gray-200">
                 <p className="font-semibold text-gray-800 mb-2">Resumo da Autuação:</p>
                 <div className="text-gray-600 space-y-1">
-                  <p><strong>Itens do RDE:</strong> {rdesVinculadas.length} vinculados</p>
-                  <p><strong>Relato:</strong> {observacao ? 'Preenchido' : 'Pendente/Vazio'}</p>
+                  <p><strong>Itens do RDE:</strong> {rdeSelecionados.length} vinculados</p>
+                  <p><strong>Relato:</strong> {descricaoOcorrido ? 'Preenchido' : 'Pendente/Vazio'}</p>
+                  <p><strong>Decisão:</strong> {decisaoAutoridade ? 'Preenchida' : 'Pendente/Vazio'}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-left">
+                <label className="text-sm font-semibold text-gray-700">Decisão da Autoridade</label>
+                <textarea
+                  rows="5"
+                  value={decisaoAutoridade}
+                  onChange={e => setDecisaoAutoridade(e.target.value)}
+                  className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                  placeholder="Descreva a decisão da autoridade competente..."
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-left">
+                  <label className="text-sm font-semibold text-gray-700">Nº BI / Nota de Punição</label>
+                  <input
+                    type="text"
+                    value={numeroBINotaPunicao}
+                    onChange={e => setNumeroBINotaPunicao(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                    placeholder="Ex: 025"
+                  />
+                </div>
+                <div className="space-y-2 bg-white p-3 rounded-xl shadow-sm border border-gray-100 text-left">
+                  <label className="text-sm font-semibold text-gray-700">Data de Publicação no BI</label>
+                  <input
+                    type="date"
+                    value={dataPublicacaoBI}
+                    onChange={e => setDataPublicacaoBI(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#556b2f]/50"
+                  />
                 </div>
               </div>
 
@@ -519,7 +713,7 @@ export default function App() {
       </main>
 
       {/* BOTÕES DE AÇÃO (FOOTER) */}
-      <div className="bg-white border-t border-gray-200 p-4 pb-20 flex gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0">
+      <div className="bg-white border-t border-gray-200 p-2 sm:p-4 pb-20 flex gap-2 sm:gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0">
         {passoAtual === 1 ? (
           <button className="flex-1 bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl text-sm hover:bg-gray-300 transition-colors">
             Cancelar
@@ -534,7 +728,7 @@ export default function App() {
           <button 
             onClick={avancarPasso}
             disabled={passoAtual === 1 && selecionados.length === 0}
-            className="flex-[2] bg-[#556b2f] text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-1 disabled:opacity-50 disabled:bg-gray-400 transition-colors shadow-sm"
+            className="flex-2 bg-[#556b2f] text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-1 disabled:opacity-50 disabled:bg-gray-400 transition-colors shadow-sm"
           >
             Próximo Passo <ChevronRight size={18} />
           </button>
@@ -542,7 +736,7 @@ export default function App() {
       </div>
 
       {/* BARRA DE NAVEGAÇÃO INFERIOR GLOBAL */}
-      <nav className="absolute bottom-0 w-full bg-white border-t border-gray-200 flex justify-around items-center p-2 pb-4 z-20 shrink-0">
+      <nav className="fixed sm:absolute bottom-0 w-full bg-white border-t border-gray-200 flex justify-around items-center p-2 pb-4 z-20 shrink-0">
         <button className="flex flex-col items-center p-2 text-gray-400 hover:text-[#556b2f] transition-colors">
           <History size={20} />
           <span className="text-[10px] mt-1 font-medium">Histórico</span>
