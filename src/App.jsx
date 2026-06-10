@@ -15,7 +15,6 @@ import {
   X,
   Save
 } from 'lucide-react';
-import { jsPDF } from 'jspdf';
 
 // --- DADOS MOCK (Simulação de Banco de Dados) ---
 const dbMilitares = [
@@ -146,19 +145,9 @@ export default function App() {
     window.print();
   };
 
-  // Geração de PDF
+  // Exportação em PDF no padrão da impressão do navegador
   const salvarPDF = () => {
-    const doc = new jsPDF({ format: 'a4', unit: 'mm' });
-    // Simples: renderiza o HTML do printRef
-    doc.html(printRef.current, {
-      callback: function (doc) {
-        doc.save('fatd.pdf');
-      },
-      margin: [10, 10, 10, 10],
-      autoPaging: 'text',
-      x: 0,
-      y: 0
-    });
+    window.print();
   };
 
   // --- COMPONENTES DE IMPRESSÃO (ANEXO V) ---
@@ -181,10 +170,32 @@ export default function App() {
       <div className="min-h-screen bg-gray-200 flex flex-col font-sans w-full">
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
-        body { background: white !important; }
-        .no-print { display: none !important; }
-        .page-break { page-break-after: always; }
-        @page { margin: 15mm; size: A4 portrait; }
+          body { background: white !important; }
+          .no-print { display: none !important; }
+          .print-page {
+            width: 100% !important;
+            max-width: 210mm !important;
+            min-height: 0 !important;
+            height: auto !important;
+            padding: 4mm 5mm !important;
+            margin: 0 0 6mm 0 !important;
+            box-sizing: border-box !important;
+          }
+          .print-section {
+            padding: 3mm !important;
+            margin-bottom: 3mm !important;
+          }
+          .print-compact {
+            font-size: 11px !important;
+            line-height: 1.15 !important;
+          }
+          .print-compact p,
+          .print-compact div {
+            margin-top: 0.1rem !important;
+            margin-bottom: 0.1rem !important;
+          }
+          .page-break { page-break-before: always; }
+          @page { margin: 8mm; size: A4 portrait; }
         }
       `}} />
       <div className="bg-[#556b2f] p-4 text-white flex justify-between items-center no-print shadow-md sticky top-0 z-50">
@@ -201,8 +212,8 @@ export default function App() {
         </div>
       </div>
       <div className="flex-1 w-full flex flex-col items-center p-2 xs:p-4 sm:p-8">
-        <div ref={printRef} className="bg-white w-full max-w-full sm:max-w-[210mm] min-h-[297mm] p-4 sm:p-8 mb-8 font-serif text-[12px] leading-relaxed text-black text-center page-break relative print:shadow-none print:p-0 print:max-w-full print:min-h-0">
-          <div className="w-full border border-black p-4 mb-6">
+        <div ref={printRef} className="bg-white w-full max-w-full sm:max-w-[210mm] min-h-[270mm] p-4 sm:p-8 mb-8 font-serif text-[12px] leading-relaxed text-black text-center relative print:shadow-none print:p-0 print:max-w-full print:min-h-0 print-page print-compact">
+          <div className="w-full border border-black p-4 mb-6 print-section">
             <div className="text-center leading-tight">
               <p className="font-semibold">MINISTÉRIO DA DEFESA</p>
               <p className="font-semibold">EXÉRCITO BRASILEIRO</p>
@@ -235,7 +246,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="border border-black p-4 mb-4 text-left">
+          <div className="border border-black p-4 mb-4 text-left print-section">
             <p className="font-semibold">IDENTIFICAÇÃO DO PARTICIPANTE</p>
             <div className="mt-3">
               <p><strong>Grau Hierárquico:</strong></p>
@@ -247,7 +258,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="border border-black p-4 mb-4">
+          <div className="border border-black p-4 mb-4 print-section">
             <p className="font-semibold">RELATO DO FATO</p>
             <p className="mt-3 text-justify whitespace-pre-line">
               {`Participo o(a) ${graduacaoMilitarExibicao} ${numeroMilitarExibicao} ${nomeGuerraMilitarExibicao}, da 1ª Cia Fuz, por ${descricaoOcorridoExibicao} e ao ser interpelado pelo ${graduacaoParticipanteExibicao} ${nomeGuerraParticipanteExibicao}, ${continuacaoOcorridoExibicao}.`}
@@ -260,7 +271,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="border border-black p-4">
+          <div className="border border-black p-4 print-section">
             <p className="font-semibold">CIENTE DO MILITAR ARROLADO</p>
             <div className="mt-3">
               <p>Declaro que tenho conhecimento de que me está sendo imputada a autoria dos atos acima e me foi concedido o prazo de três dias úteis para apresentar, por escrito, as minhas justificativas ou razões de defesa.</p>
@@ -280,27 +291,26 @@ export default function App() {
 
         <div className="page-break" />
 
-        <div className="bg-white w-full max-w-full sm:max-w-[210mm] min-h-[297mm] p-4 sm:p-8 mb-8 font-serif text-[12px] leading-relaxed text-black text-center border border-black print:shadow-none print:p-0 print:max-w-full print:min-h-0">
-          <div className="border border-black p-4 mb-4">
+        <div className="bg-white w-full max-w-full sm:max-w-[210mm] min-h-[270mm] p-4 sm:p-8 mb-8 font-serif text-[12px] leading-relaxed text-black text-center border border-black print:shadow-none print:p-0 print:max-w-full print:min-h-0 print-page print-compact">
+          <div className="border border-black p-4 mb-4 print-section">
             <p className="font-semibold">JUSTIFICATIVA / RAZÕES DE DEFESA</p>
-            <div className="mt-4 space-y-4">
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
-              <div className="border-b border-black h-px" />
+            <div className=" border border-black p-4 mb-4 print-section mt-4 space-y-4">
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
             </div>
-            <div className="mt-4 border-t border-black pt-3">
+            <div className="mt-4 border-t border-white pt-3">
               <p>Data:</p>
               <p>__/__/______</p>
             </div>
-            <div className="mt-4 border-t border-black pt-3">
-              <p>Assinatura:</p>
+            <div className="mt-4 border-t border-white pt-3">
               <p>_____________________</p>
               <p className="mt-2 font-semibold">{nomeCompletoMilitarExibicao}</p>
               <p>{graduacaoMilitarExibicao}</p>
@@ -314,23 +324,24 @@ export default function App() {
                 <p className="whitespace-pre-line">{decisaoAutoridadeExibicao}</p>
               ) : (
                 <>
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px mb-3" />
-                  <div className="border-b border-black h-px" />
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
+                  <p>_________________________________________________________________________________</p>
                 </>
               )}
             </div>
-            <div className="mt-4 border-t border-black pt-3">
+            <div className="mt-4 border-t border-white pt-3">
               <p>Data:</p>
               <p>__/__/______</p>
             </div>
-            <div className="mt-4 border-t border-black pt-3">
+            <div className="mt-4 border-t border-white pt-3">
               <p className="font-semibold">MAURICIO NARCISO - CAP</p>
               <p>Comandante da 1ª Cia Fuz</p>
               <p className="font-semibold" style={{ paddingTop: '5%' }}>
